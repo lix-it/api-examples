@@ -92,6 +92,12 @@ def get_profile(url):
             if r.status_code == 404:
                 print("Profile not found: " + url)
                 break
+            if r.status_code == 400:
+                # process the json body
+                j = r.json()
+                if j["error"]["type"] == "not_found":
+                    print("Profile not found: " + url)
+                    break
             if r.status_code == 429:
                 print("Rate limit exceeded")
                 time.sleep(sleep_time)

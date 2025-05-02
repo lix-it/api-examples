@@ -83,8 +83,7 @@ def collect_search(start_page = 1):
 
         print("total:", result['paging']['total'], "count:", count, "finish:", finish)
 
-        # 25 per page, if there is a remainder then only go one page further
-        if count + per_page >= result['paging']['total']:
+        if count >= result['paging']['total']:
             finish = True
         else:
             sequence_id = result['meta']['sequenceId']

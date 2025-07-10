@@ -85,6 +85,9 @@ def collect_search(start_page = 1):
 
         if count >= result['paging']['total']:
             finish = True
+        elif count >= 2500:
+            print("Reached the limit of 2500 results, stopping.")
+            finish = True
         else:
             sequence_id = result['meta']['sequenceId']
             page = page + 1

@@ -29,7 +29,7 @@ API_KEY = args.api_key
 db_path = args.db_path
 
 # Parameters
-sleep_time = 0.1  # sleep for 1 second to avoid rate limit
+sleep_time = 3  # sleep for 3 second to avoid rate limit
 
 # helper functions
 def timeit(func):
@@ -111,6 +111,8 @@ def get_profile(url):
             if r.status_code > 499:
                 print("Error getting profile: " + str(r.status_code))
                 print(r.text)
+                time.sleep(sleep_time)
+                continue
         success = True
         print("got", url)
         try:

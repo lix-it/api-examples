@@ -1,17 +1,17 @@
-[tool.poetry]
+[project]
 name = "api-examples"
 version = "0.1.0"
 description = ""
 authors = ["Your Name <you@example.com>"]
 license = "MIT"
 readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "pandas>=2.3.2",
+    "requests>=2.32.5",
+]
 
-[tool.poetry.dependencies]
-python = "^3.9"
+[dependencies]
 requests = "^2.31.0"
 pandas = "^2.2.1"
 
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"

@@ -51,7 +51,6 @@
       "parameters": {
         "resource": "rows",
         "operation": "get",
-        "dataTableId": "employees_run_state",
         "filters": {
           "conditions": [
             {
@@ -69,7 +68,8 @@
       "name": "Check Run State",
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1,
-      "position": [650, 300]
+      "position": [650, 300],
+      "notes": "Select the 'employees_run_state' data table after importing"
     },
     {
       "parameters": {
@@ -102,7 +102,7 @@
     },
     {
       "parameters": {
-        "url": "={{ $('Set Variables').item.json.base_url }}/org/={{ $('Set Variables').item.json.org_id }}/employees",
+        "url": "={{ $('Set Variables').first().json.base_url + '/org/' + $('Set Variables').first().json.org_id + '/employees' }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendQuery": true,
@@ -127,13 +127,7 @@
       "name": "Fetch Employees Page",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.1,
-      "position": [1050, 200],
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "2",
-          "name": "LookC API Auth"
-        }
-      }
+      "position": [1050, 200]
     },
     {
       "parameters": {
@@ -159,7 +153,6 @@
       "parameters": {
         "resource": "rows",
         "operation": "upsert",
-        "dataTableId": "employees",
         "columnToMatchOn": "person_id",
         "fieldsToSend": "defineBelow",
         "fields": {
@@ -236,7 +229,8 @@
       "name": "Upsert Employee",
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1,
-      "position": [1650, 200]
+      "position": [1650, 200],
+      "notes": "Select the 'employees' data table after importing"
     },
     {
       "parameters": {
@@ -331,7 +325,6 @@
       "parameters": {
         "resource": "rows",
         "operation": "upsert",
-        "dataTableId": "employees_run_state",
         "columnToMatchOn": "org_id",
         "fieldsToSend": "defineBelow",
         "fields": {
@@ -356,7 +349,8 @@
       "name": "Mark Complete",
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1,
-      "position": [2250, 300]
+      "position": [2250, 300],
+      "notes": "Select the 'employees_run_state' data table after importing"
     },
     {
       "parameters": {

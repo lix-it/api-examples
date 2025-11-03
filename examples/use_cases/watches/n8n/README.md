@@ -60,15 +60,32 @@ This workflow demonstrates how to:
    - Click "Import from File"
    - Select `get_employees_workflow.json`
 
-3. **Configure Credentials**
+3. **Configure Data Table Nodes**
+   
+   After importing, you must configure each Data table node to select the correct table:
+   
+   - Open the **"Check Run State"** node
+     - Click on the "Data table" dropdown
+     - Select `employees_run_state`
+   
+   - Open the **"Upsert Employee"** node
+     - Click on the "Data table" dropdown
+     - Select `employees`
+   
+   - Open the **"Mark Complete"** node
+     - Click on the "Data table" dropdown
+     - Select `employees_run_state`
+
+4. **Configure Credentials**
 
    **LookC API Authentication**:
    - Create a new "Header Auth" credential in n8n
    - Set Header Name: `Authorization`
    - Set Header Value: Your LookC API token
    - Or set the `LOOKC_API_TOKEN` environment variable
+   - Assign this credential to the **"Fetch Employees Page"** HTTP Request node
 
-4. **Set Organization ID**
+5. **Set Organization ID**
    - In the "Set Variables" node, update the `org_id` value
    - Replace `YOUR_ORG_ID_HERE` with your LookC organization UUID
 

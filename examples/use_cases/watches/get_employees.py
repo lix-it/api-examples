@@ -40,7 +40,7 @@ API_KEY = args.api_key or os.environ.get("LOOKC_API_TOKEN")
 db_path = args.db_path
 
 # Parameters
-SLEEP_TIME = 3  # sleep for 3 seconds to avoid rate limit
+SLEEP_TIME = 0.05  # LookC supports 50 requests/s, using 0.05s (20 req/s) to be conservative
 BASE_URL = "https://api.lookc.io"
 
 

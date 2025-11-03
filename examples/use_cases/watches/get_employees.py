@@ -74,6 +74,39 @@ def migrate(conn):
     )"""
     conn.execute(run_state_stmt)
     conn.commit()
+    
+    ensure_columns(conn)
+
+
+def ensure_columns(conn):
+    """Add columns to employees table if they don't exist (for backward compatibility)"""
+    cursor = conn.execute("PRAGMA table_info(employees)")
+    existing_cols = {row[1] for row in cursor.fetchall()}
+    
+    desired_columns = {
+        'name': 'TEXT',
+        'title': 'TEXT',
+        'date_started': 'TEXT',
+        'date_ended': 'TEXT',
+        'location': 'TEXT',
+        'image': 'TEXT',
+        'current_org_id': 'TEXT',
+        'current_org_name': 'TEXT',
+        'links_linkedin': 'TEXT',
+        'links_sales_nav': 'TEXT',
+        'tenure_at_org_months': 'INTEGER',
+        'tenure_in_role_months': 'INTEGER',
+    }
+    
+    for col_name, col_type in desired_columns.items():
+        if col_name not in existing_cols:
+            try:
+                conn.execute(f"ALTER TABLE employees ADD COLUMN {col_name} {col_type}")
+                print(f"Added column: {col_name}")
+            except Exception as e:
+                print(f"Warning: Could not add column {col_name}: {e}")
+    
+    conn.commit()
 
 
 def check_if_complete(conn, org_id):
@@ -159,22 +192,70 @@ def get_employees_page(org_id, after=None, page_size=None):
 
 
 def save_employees(conn, org_id, employees):
-    """Save employees to the database"""
+    """Save employees to the database with extracted fields"""
     for employee in employees:
         person_id = employee.get("personId")
         if not person_id:
             print("Warning: Employee missing personId, skipping")
             continue
         
+        name = employee.get("name")
+        title = employee.get("title")
+        date_started = employee.get("dateStarted")
+        date_ended = employee.get("dateEnded")
+        location = employee.get("location")
+        image = employee.get("image")
+        
+        links = employee.get("links") or {}
+        links_linkedin = links.get("linkedin")
+        links_sales_nav = links.get("salesNav")
+        
+        current_org = employee.get("currentOrg") or {}
+        current_org_id = current_org.get("orgId")
+        current_org_name = current_org.get("name")
+        
+        if not current_org_id and date_ended is None:
+            current_org_id = org_id
+        
+        def to_months(duration_obj):
+            if not duration_obj:
+                return None
+            years = duration_obj.get("years", 0)
+            months = duration_obj.get("months", 0)
+            return years * 12 + months
+        
+        tenure_at_org_months = to_months(employee.get("tenureAtOrg"))
+        tenure_in_role_months = to_months(employee.get("tenureInRole"))
+        
         json_data = json.dumps(employee)
+        
         try:
             conn.execute(
-                """insert into employees (person_id, org_id, data, collected_at) 
-                   values (?, ?, ?, ?)
-                   on conflict(person_id, org_id) do update set
-                   data = excluded.data,
-                   collected_at = excluded.collected_at""",
-                (person_id, org_id, json_data, datetime.datetime.now()),
+                """insert into employees (
+                    person_id, org_id, name, title, date_started, date_ended, 
+                    location, image, current_org_id, current_org_name, 
+                    links_linkedin, links_sales_nav, tenure_at_org_months, 
+                    tenure_in_role_months, data, collected_at
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                on conflict(person_id, org_id) do update set
+                    name = excluded.name,
+                    title = excluded.title,
+                    date_started = excluded.date_started,
+                    date_ended = excluded.date_ended,
+                    location = excluded.location,
+                    image = excluded.image,
+                    current_org_id = excluded.current_org_id,
+                    current_org_name = excluded.current_org_name,
+                    links_linkedin = excluded.links_linkedin,
+                    links_sales_nav = excluded.links_sales_nav,
+                    tenure_at_org_months = excluded.tenure_at_org_months,
+                    tenure_in_role_months = excluded.tenure_in_role_months,
+                    data = excluded.data,
+                    collected_at = excluded.collected_at""",
+                (person_id, org_id, name, title, date_started, date_ended,
+                 location, image, current_org_id, current_org_name,
+                 links_linkedin, links_sales_nav, tenure_at_org_months,
+                 tenure_in_role_months, json_data, datetime.datetime.now()),
             )
         except Exception as e:
             print(f"Error saving employee {person_id}: {e}")

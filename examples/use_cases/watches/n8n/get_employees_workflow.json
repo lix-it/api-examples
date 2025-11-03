@@ -1,0 +1,421 @@
+{
+  "name": "LookC GetEmployees to SQLite",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "name": "When clicking 'Test workflow'",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "org_id",
+              "value": "={{ $json.org_id || 'YOUR_ORG_ID_HERE' }}"
+            },
+            {
+              "name": "api_key",
+              "value": "={{ $env.LOOKC_API_TOKEN }}"
+            },
+            {
+              "name": "base_url",
+              "value": "https://api.lookc.io"
+            },
+            {
+              "name": "after_cursor",
+              "value": ""
+            },
+            {
+              "name": "page_count",
+              "value": "0"
+            },
+            {
+              "name": "total_employees",
+              "value": "0"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+      "name": "Set Variables",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.2,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CREATE TABLE IF NOT EXISTS employees (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  person_id TEXT NOT NULL,\n  org_id TEXT NOT NULL,\n  name TEXT,\n  title TEXT,\n  date_started TEXT,\n  date_ended TEXT,\n  location TEXT,\n  image TEXT,\n  current_org_id TEXT,\n  current_org_name TEXT,\n  links_linkedin TEXT,\n  links_sales_nav TEXT,\n  tenure_at_org_months INTEGER,\n  tenure_in_role_months INTEGER,\n  data TEXT NOT NULL,\n  collected_at DATETIME NOT NULL,\n  UNIQUE(person_id, org_id)\n);\n\nCREATE TABLE IF NOT EXISTS run_state (\n  org_id TEXT PRIMARY KEY,\n  last_collected_at DATETIME,\n  is_complete BOOLEAN DEFAULT 0\n);",
+        "options": {}
+      },
+      "id": "c3d4e5f6-a7b8-9012-cdef-123456789012",
+      "name": "Create Database Tables",
+      "type": "n8n-nodes-base.sqlite",
+      "typeVersion": 1,
+      "position": [650, 300],
+      "credentials": {
+        "sqlite": {
+          "id": "1",
+          "name": "SQLite account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=SELECT is_complete FROM run_state WHERE org_id = '{{ $json.org_id }}'",
+        "options": {}
+      },
+      "id": "d4e5f6a7-b8c9-0123-def1-234567890123",
+      "name": "Check if Already Complete",
+      "type": "n8n-nodes-base.sqlite",
+      "typeVersion": 1,
+      "position": [850, 300],
+      "credentials": {
+        "sqlite": {
+          "id": "1",
+          "name": "SQLite account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.is_complete }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "e5f6a7b8-c9d0-1234-ef12-345678901234",
+      "name": "Is Complete?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.base_url }}/org/{{ $json.org_id }}/employees",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "after",
+              "value": "={{ $json.after_cursor }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": false,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "f6a7b8c9-d0e1-2345-f123-456789012345",
+      "name": "Fetch Employees Page",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1250, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "2",
+          "name": "LookC API Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract employees from the response\nconst response = $input.first().json;\nconst employees = response.employees || [];\nconst paging = response.paging || {};\nconst links = paging._links || {};\nconst nextLink = links.next || null;\n\n// Parse the 'after' cursor from next link\nlet afterCursor = '';\nif (nextLink) {\n  try {\n    const url = new URL(nextLink, 'https://api.lookc.io');\n    afterCursor = url.searchParams.get('after') || '';\n  } catch (e) {\n    // If it's a relative URL\n    const match = nextLink.match(/[?&]after=([^&]+)/);\n    if (match) {\n      afterCursor = match[1];\n    }\n  }\n}\n\n// Get current state from previous node\nconst currentState = $('Set Variables').first().json;\nconst pageCount = parseInt(currentState.page_count || 0) + 1;\nconst totalEmployees = parseInt(currentState.total_employees || 0) + employees.length;\n\n// Return employees with metadata\nreturn employees.map(employee => ({\n  json: {\n    ...employee,\n    _metadata: {\n      org_id: currentState.org_id,\n      api_key: currentState.api_key,\n      base_url: currentState.base_url,\n      after_cursor: afterCursor,\n      has_more: !!afterCursor,\n      page_count: pageCount,\n      total_employees: totalEmployees\n    }\n  }\n}));"
+      },
+      "id": "a7b8c9d0-e1f2-3456-1234-567890123456",
+      "name": "Process Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1450, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process each employee and prepare for database insertion\nconst items = $input.all();\nconst processedItems = [];\n\nfor (const item of items) {\n  const employee = item.json;\n  const metadata = employee._metadata;\n  \n  // Extract fields\n  const personId = employee.personId;\n  const orgId = metadata.org_id;\n  const name = employee.name || null;\n  const title = employee.title || null;\n  const dateStarted = employee.dateStarted || null;\n  const dateEnded = employee.dateEnded || null;\n  const location = employee.location || null;\n  const image = employee.image || null;\n  \n  const links = employee.links || {};\n  const linksLinkedin = links.linkedin || null;\n  const linksSalesNav = links.salesNav || null;\n  \n  const currentOrg = employee.currentOrg || {};\n  let currentOrgId = currentOrg.orgId || null;\n  const currentOrgName = currentOrg.name || null;\n  \n  // If no current org but not ended, assume it's the org we're querying\n  if (!currentOrgId && !dateEnded) {\n    currentOrgId = orgId;\n  }\n  \n  // Convert tenure to months\n  const toMonths = (duration) => {\n    if (!duration) return null;\n    const years = duration.years || 0;\n    const months = duration.months || 0;\n    return years * 12 + months;\n  };\n  \n  const tenureAtOrgMonths = toMonths(employee.tenureAtOrg);\n  const tenureInRoleMonths = toMonths(employee.tenureInRole);\n  \n  // Store full JSON data\n  const jsonData = JSON.stringify(employee);\n  const collectedAt = new Date().toISOString();\n  \n  processedItems.push({\n    json: {\n      person_id: personId,\n      org_id: orgId,\n      name: name,\n      title: title,\n      date_started: dateStarted,\n      date_ended: dateEnded,\n      location: location,\n      image: image,\n      current_org_id: currentOrgId,\n      current_org_name: currentOrgName,\n      links_linkedin: linksLinkedin,\n      links_sales_nav: linksSalesNav,\n      tenure_at_org_months: tenureAtOrgMonths,\n      tenure_in_role_months: tenureInRoleMonths,\n      data: jsonData,\n      collected_at: collectedAt,\n      _metadata: metadata\n    }\n  });\n}\n\nreturn processedItems;"
+      },
+      "id": "b8c9d0e1-f2a3-4567-2345-678901234567",
+      "name": "Prepare for Database",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1650, 200]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO employees (\n  person_id, org_id, name, title, date_started, date_ended,\n  location, image, current_org_id, current_org_name,\n  links_linkedin, links_sales_nav, tenure_at_org_months,\n  tenure_in_role_months, data, collected_at\n) VALUES (\n  '{{ $json.person_id }}',\n  '{{ $json.org_id }}',\n  '{{ $json.name }}',\n  '{{ $json.title }}',\n  '{{ $json.date_started }}',\n  '{{ $json.date_ended }}',\n  '{{ $json.location }}',\n  '{{ $json.image }}',\n  '{{ $json.current_org_id }}',\n  '{{ $json.current_org_name }}',\n  '{{ $json.links_linkedin }}',\n  '{{ $json.links_sales_nav }}',\n  {{ $json.tenure_at_org_months }},\n  {{ $json.tenure_in_role_months }},\n  '{{ $json.data }}',\n  '{{ $json.collected_at }}'\n)\nON CONFLICT(person_id, org_id) DO UPDATE SET\n  name = excluded.name,\n  title = excluded.title,\n  date_started = excluded.date_started,\n  date_ended = excluded.date_ended,\n  location = excluded.location,\n  image = excluded.image,\n  current_org_id = excluded.current_org_id,\n  current_org_name = excluded.current_org_name,\n  links_linkedin = excluded.links_linkedin,\n  links_sales_nav = excluded.links_sales_nav,\n  tenure_at_org_months = excluded.tenure_at_org_months,\n  tenure_in_role_months = excluded.tenure_in_role_months,\n  data = excluded.data,\n  collected_at = excluded.collected_at",
+        "options": {}
+      },
+      "id": "c9d0e1f2-a3b4-5678-3456-789012345678",
+      "name": "Insert Employee",
+      "type": "n8n-nodes-base.sqlite",
+      "typeVersion": 1,
+      "position": [1850, 200],
+      "credentials": {
+        "sqlite": {
+          "id": "1",
+          "name": "SQLite account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get the last item's metadata to check if there are more pages\nconst items = $input.all();\nif (items.length === 0) {\n  return [{ json: { has_more: false } }];\n}\n\nconst lastItem = items[items.length - 1];\nconst metadata = lastItem.json._metadata;\n\nreturn [{\n  json: {\n    has_more: metadata.has_more,\n    after_cursor: metadata.after_cursor,\n    org_id: metadata.org_id,\n    api_key: metadata.api_key,\n    base_url: metadata.base_url,\n    page_count: metadata.page_count,\n    total_employees: metadata.total_employees\n  }\n}];"
+      },
+      "id": "d0e1f2a3-b4c5-6789-4567-890123456789",
+      "name": "Check for More Pages",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2050, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.has_more }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "e1f2a3b4-c5d6-7890-5678-901234567890",
+      "name": "Has More Pages?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [2250, 200]
+    },
+    {
+      "parameters": {
+        "amount": 0.05,
+        "unit": "seconds"
+      },
+      "id": "f2a3b4c5-d6e7-8901-6789-012345678901",
+      "name": "Rate Limit Wait",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [2450, 100],
+      "webhookId": "rate-limit-wait"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO run_state (org_id, last_collected_at, is_complete)\nVALUES ('{{ $json.org_id }}', datetime('now'), 1)\nON CONFLICT(org_id) DO UPDATE SET\n  last_collected_at = datetime('now'),\n  is_complete = 1",
+        "options": {}
+      },
+      "id": "a3b4c5d6-e7f8-9012-7890-123456789012",
+      "name": "Mark Complete",
+      "type": "n8n-nodes-base.sqlite",
+      "typeVersion": 1,
+      "position": [2450, 300],
+      "credentials": {
+        "sqlite": {
+          "id": "1",
+          "name": "SQLite account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nreturn [{\n  json: {\n    message: 'Collection complete!',\n    org_id: item.org_id,\n    total_pages: item.page_count,\n    total_employees: item.total_employees\n  }\n}];"
+      },
+      "id": "b4c5d6e7-f8a9-0123-8901-234567890123",
+      "name": "Success Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2650, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{\n  json: {\n    message: 'Already collected all employees for this organization',\n    org_id: $('Set Variables').first().json.org_id\n  }\n}];"
+      },
+      "id": "c5d6e7f8-a9b0-1234-9012-345678901234",
+      "name": "Already Complete Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1250, 400]
+    }
+  ],
+  "connections": {
+    "When clicking 'Test workflow'": {
+      "main": [
+        [
+          {
+            "node": "Set Variables",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Variables": {
+      "main": [
+        [
+          {
+            "node": "Create Database Tables",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Database Tables": {
+      "main": [
+        [
+          {
+            "node": "Check if Already Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check if Already Complete": {
+      "main": [
+        [
+          {
+            "node": "Is Complete?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Complete?": {
+      "main": [
+        [
+          {
+            "node": "Already Complete Message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fetch Employees Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Employees Page": {
+      "main": [
+        [
+          {
+            "node": "Process Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Response": {
+      "main": [
+        [
+          {
+            "node": "Prepare for Database",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare for Database": {
+      "main": [
+        [
+          {
+            "node": "Insert Employee",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Employee": {
+      "main": [
+        [
+          {
+            "node": "Check for More Pages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check for More Pages": {
+      "main": [
+        [
+          {
+            "node": "Has More Pages?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has More Pages?": {
+      "main": [
+        [
+          {
+            "node": "Rate Limit Wait",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rate Limit Wait": {
+      "main": [
+        [
+          {
+            "node": "Fetch Employees Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Complete": {
+      "main": [
+        [
+          {
+            "node": "Success Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2025-11-03T13:16:00.000Z",
+  "versionId": "1"
+}

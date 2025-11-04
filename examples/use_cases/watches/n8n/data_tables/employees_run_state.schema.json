@@ -1,0 +1,30 @@
+{
+  "table_name": "employees_run_state",
+  "description": "Tracks completion status for employee collection by organization",
+  "columns": [
+    {
+      "name": "org_id",
+      "type": "string",
+      "description": "LookC organization identifier (unique key)",
+      "required": true
+    },
+    {
+      "name": "last_collected_at",
+      "type": "string",
+      "description": "Timestamp of last collection (ISO datetime string)",
+      "required": false
+    },
+    {
+      "name": "is_complete",
+      "type": "boolean",
+      "description": "Flag indicating if collection is complete for this organization",
+      "required": false
+    }
+  ],
+  "notes": [
+    "The org_id column should be used as the unique identifier for upsert operations",
+    "is_complete is a boolean column (true/false)",
+    "last_collected_at stores ISO datetime strings",
+    "This table prevents re-fetching data for organizations that have already been processed"
+  ]
+}

@@ -24,7 +24,27 @@ This workflow demonstrates how to:
 
 1. **Create Data Tables**
    
-   Before importing the workflow, create two data tables in your n8n project:
+   Before importing the workflow, create two data tables in your n8n project. You have two options:
+
+   **Option A: Quick Setup with CSV Import (Recommended)**
+   
+   The `data_tables/` directory contains CSV templates that you can import to quickly create the tables:
+   
+   1. Navigate to the Data tables tab in your n8n project
+   2. Click "Import from file"
+   3. Select `data_tables/employees.csv` to create the `employees` table
+   4. After import, verify the column types:
+      - Set `tenure_at_org_months` to **Number** type
+      - Set `tenure_in_role_months` to **Number** type
+      - All other columns should be **String** type
+   5. Repeat for `data_tables/employees_run_state.csv` to create the `employees_run_state` table
+   6. After import, verify the column types:
+      - Set `is_complete` to **Boolean** type
+      - Other columns should be **String** type
+
+   **Option B: Manual Setup**
+   
+   Alternatively, create the tables manually following the schema definitions in `data_tables/*.schema.json`:
 
    **Table 1: `employees`**
    - Navigate to the Data tables tab in your n8n project
@@ -107,6 +127,30 @@ This workflow demonstrates how to:
    - Navigate to the Data tables tab
    - Open the `employees` table to view collected employee data
    - Check `employees_run_state` to see completion status
+
+### Programmatic Setup
+
+The `data_tables/` directory contains schema definition files and CSV templates to help automate data table creation:
+
+**Schema Files**:
+- `data_tables/employees.schema.json` - Complete schema definition for the employees table
+- `data_tables/employees_run_state.schema.json` - Complete schema definition for the run state table
+
+**CSV Templates**:
+- `data_tables/employees.csv` - Header-only CSV for quick import
+- `data_tables/employees_run_state.csv` - Header-only CSV for quick import
+
+**Limitations**:
+- n8n does not currently provide an official REST API for programmatically creating data tables and columns
+- The Data table node does not have a "create table" operation
+- The recommended approach is to use CSV import (Option A above) or manual creation (Option B)
+- Data tables are project-scoped, so the workflow and tables must be in the same n8n Project/Canvas
+
+**For Automation**:
+If you need to automate data table creation across multiple n8n instances, you can:
+1. Use the CSV import feature via the n8n UI
+2. For self-hosted instances, explore the internal API endpoints (not officially documented, version-specific)
+3. Create a setup workflow that validates table existence and guides users through manual creation
 
 ### Data Table Schema
 

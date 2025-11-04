@@ -1,167 +1,153 @@
 # n8n Workflow for LookC GetEmployees
 
-This directory contains an n8n workflow that retrieves all employees for a specified organization from the LookC API and stores them in n8n data tables.
+This directory contains an n8n workflow that retrieves all employees for a specified organization from the LookC API and stores them in a SQLite database.
 
 ## Workflow: get_employees_workflow.json
 
 This workflow demonstrates how to:
 - Fetch all employees for an organization using the LookC API
 - Handle pagination automatically
-- Store employee data in n8n data tables
+- Store employee data in SQLite with programmatic schema creation
 - Track completion status to avoid re-fetching data
-- Implement rate limiting (50ms delay between requests)
+- Implement rate limiting (20ms delay = 50 req/s to match LookC API limit)
 
 ### Features
 
 - **Automatic Pagination**: The workflow automatically follows pagination links to retrieve all employees
-- **Native n8n Data Tables**: Uses n8n's built-in data tables for storage (no external database required)
+- **Programmatic Schema Creation**: Database tables are created automatically via CREATE TABLE IF NOT EXISTS statements
+- **SQLite Storage**: Uses the n8n-nodes-sqlite3 community node for local SQLite database storage
 - **Resumable**: Tracks completion status to avoid re-processing the same organization
-- **Rate Limiting**: Implements a 50ms delay between API requests (20 req/s) to stay within API limits
+- **Rate Limiting**: Implements a 20ms delay between API requests (50 req/s) to match LookC API limits
 - **Error Handling**: Built-in retry logic for API requests
-- **Data Extraction**: Extracts key fields from employee records for structured storage
+- **Composite Key Upserts**: Uses ON CONFLICT with composite keys (person_id, org_id) to prevent duplicate records
+
+### Prerequisites
+
+1. **Install the n8n-nodes-sqlite3 Community Node**
+
+   This workflow requires the `n8n-nodes-sqlite3` community node by DangerBlack.
+
+   **For n8n Cloud or Desktop**:
+   - Go to Settings → Community Nodes
+   - Click "Install a community node"
+   - Enter: `n8n-nodes-sqlite3`
+   - Click Install
+
+   **For Self-Hosted n8n**:
+   - Set environment variable: `N8N_COMMUNITY_NODES_ENABLED=true`
+   - Restart n8n
+   - Follow the Cloud/Desktop installation steps above
+
+   **Repository**: https://github.com/DangerBlack/n8n-node-sqlite3
+
+2. **Database File Path**
+
+   The workflow uses `/data/lookc_employees.db` as the default database path.
+
+   **For Docker deployments**:
+   - Mount a volume to persist the database:
+     ```bash
+     docker run -v ./n8n_data:/data n8nio/n8n
+     ```
+
+   **For self-hosted (non-Docker)**:
+   - The default path `/data/` should be writable by the n8n process
+   - Alternatively, change `db_path` in the "Set Variables" node to a path like `~/.n8n/lookc_employees.db`
 
 ### Setup
 
-1. **Create Data Tables**
-   
-   Before importing the workflow, create two data tables in your n8n project. You have two options:
-
-   **Option A: Quick Setup with CSV Import (Recommended)**
-   
-   The `data_tables/` directory contains CSV templates that you can import to quickly create the tables:
-   
-   1. Navigate to the Data tables tab in your n8n project
-   2. Click "Import from file"
-   3. Select `data_tables/employees.csv` to create the `employees` table
-   4. After import, verify the column types:
-      - Set `tenure_at_org_months` to **Number** type
-      - Set `tenure_in_role_months` to **Number** type
-      - All other columns should be **String** type
-   5. Repeat for `data_tables/employees_run_state.csv` to create the `employees_run_state` table
-   6. After import, verify the column types:
-      - Set `is_complete` to **Boolean** type
-      - Other columns should be **String** type
-
-   **Option B: Manual Setup**
-   
-   Alternatively, create the tables manually following the schema definitions in `data_tables/*.schema.json`:
-
-   **Table 1: `employees`**
-   - Navigate to the Data tables tab in your n8n project
-   - Click "Create Data table"
-   - Name it `employees`
-   - Add the following columns:
-     - `person_id` (String) - Primary identifier
-     - `org_id` (String)
-     - `name` (String)
-     - `title` (String)
-     - `date_started` (String)
-     - `date_ended` (String)
-     - `location` (String)
-     - `image` (String)
-     - `current_org_id` (String)
-     - `current_org_name` (String)
-     - `links_linkedin` (String)
-     - `links_sales_nav` (String)
-     - `tenure_at_org_months` (Number)
-     - `tenure_in_role_months` (Number)
-     - `data` (String) - Full JSON response
-     - `collected_at` (String) - ISO timestamp
-
-   **Table 2: `employees_run_state`**
-   - Create another data table named `employees_run_state`
-   - Add the following columns:
-     - `org_id` (String) - Primary identifier
-     - `last_collected_at` (String) - ISO timestamp
-     - `is_complete` (Boolean)
-
-2. **Import the Workflow**
+1. **Import the Workflow**
    - Open n8n
    - Click "Import from File"
    - Select `get_employees_workflow.json`
 
-3. **Configure Data Table Nodes**
-   
-   After importing, you must configure each Data table node to select the correct table:
-   
-   - Open the **"Check Run State"** node
-     - Click on the "Data table" dropdown
-     - Select `employees_run_state`
-   
-   - Open the **"Upsert Employee"** node
-     - Click on the "Data table" dropdown
-     - Select `employees`
-   
-   - Open the **"Mark Complete"** node
-     - Click on the "Data table" dropdown
-     - Select `employees_run_state`
+2. **Configure LookC API Credentials**
 
-4. **Configure Credentials**
+   The workflow needs your LookC API token to authenticate requests.
 
-   **LookC API Authentication**:
+   **Option A: Environment Variable (Recommended)**:
+   - Set the `LOOKC_API_TOKEN` environment variable with your API token
+   - The workflow will automatically use it via `$env.LOOKC_API_TOKEN`
+
+   **Option B: Header Auth Credential**:
    - Create a new "Header Auth" credential in n8n
    - Set Header Name: `Authorization`
    - Set Header Value: Your LookC API token
-   - Or set the `LOOKC_API_TOKEN` environment variable
    - Assign this credential to the **"Fetch Employees Page"** HTTP Request node
 
-5. **Set Organization ID**
-   - In the "Set Variables" node, update the `org_id` value
+3. **Configure Database Path (Optional)**
+
+   If you want to use a different database location:
+   - Open the **"Set Variables"** node
+   - Update the `db_path` value to your desired path
+   - Ensure the path is writable by the n8n process
+
+4. **Set Organization ID**
+   - In the **"Set Variables"** node, update the `org_id` value
    - Replace `YOUR_ORG_ID_HERE` with your LookC organization UUID
 
 ### Usage
 
-1. **Configure the org_id**:
-   - Edit the "Set Variables" node
-   - Set the `org_id` field to your LookC organization UUID
-
-2. **Run the Workflow**:
+1. **Run the Workflow**:
    - Click "Execute Workflow" or "Test workflow"
-   - The workflow will fetch all employees and store them in the data tables
+   - The workflow will:
+     - Create the database tables if they don't exist
+     - Check if the organization has already been processed
+     - Fetch all employees page by page
+     - Store them in the SQLite database
 
-3. **Monitor Progress**:
+2. **Monitor Progress**:
    - Watch the execution flow through the nodes
-   - The "Success Message" node will show total pages and employees collected
+   - The **"Success Message"** node will show total pages and employees collected
 
-4. **View Results**:
-   - Navigate to the Data tables tab
-   - Open the `employees` table to view collected employee data
-   - Check `employees_run_state` to see completion status
+3. **View Results**:
+   - Query the SQLite database directly using any SQLite client
+   - Or create another n8n workflow with SQLite nodes to query the data
 
-### Programmatic Setup
+### Database Schema
 
-The `data_tables/` directory contains schema definition files and CSV templates to help automate data table creation:
-
-**Schema Files**:
-- `data_tables/employees.schema.json` - Complete schema definition for the employees table
-- `data_tables/employees_run_state.schema.json` - Complete schema definition for the run state table
-
-**CSV Templates**:
-- `data_tables/employees.csv` - Header-only CSV for quick import
-- `data_tables/employees_run_state.csv` - Header-only CSV for quick import
-
-**Limitations**:
-- n8n does not currently provide an official REST API for programmatically creating data tables and columns
-- The Data table node does not have a "create table" operation
-- The recommended approach is to use CSV import (Option A above) or manual creation (Option B)
-- Data tables are project-scoped, so the workflow and tables must be in the same n8n Project/Canvas
-
-**For Automation**:
-If you need to automate data table creation across multiple n8n instances, you can:
-1. Use the CSV import feature via the n8n UI
-2. For self-hosted instances, explore the internal API endpoints (not officially documented, version-specific)
-3. Create a setup workflow that validates table existence and guides users through manual creation
-
-### Data Table Schema
-
-The workflow uses two data tables:
+The workflow creates two tables automatically:
 
 **employees**:
-- `person_id`: LookC person identifier (unique key)
+```sql
+CREATE TABLE IF NOT EXISTS employees (
+  person_id TEXT NOT NULL,
+  org_id TEXT NOT NULL,
+  name TEXT,
+  title TEXT,
+  date_started TEXT,
+  date_ended TEXT,
+  location TEXT,
+  image TEXT,
+  current_org_id TEXT,
+  current_org_name TEXT,
+  links_linkedin TEXT,
+  links_sales_nav TEXT,
+  tenure_at_org_months REAL,
+  tenure_in_role_months REAL,
+  data TEXT,
+  collected_at TEXT,
+  UNIQUE (person_id, org_id)
+);
+```
+
+**employees_run_state**:
+```sql
+CREATE TABLE IF NOT EXISTS employees_run_state (
+  org_id TEXT PRIMARY KEY,
+  last_collected_at TEXT,
+  is_complete INTEGER
+);
+```
+
+**Column Descriptions**:
+
+*employees table*:
+- `person_id`: LookC person identifier
 - `org_id`: LookC organization identifier
 - `name`: Employee name
 - `title`: Job title
-- `date_started`: Start date at organization
+- `date_started`: Start date at organization (ISO date string)
 - `date_ended`: End date (empty if current)
 - `location`: Employee location
 - `image`: Profile image URL
@@ -171,31 +157,33 @@ The workflow uses two data tables:
 - `links_sales_nav`: Sales Navigator URL
 - `tenure_at_org_months`: Total tenure at organization in months
 - `tenure_in_role_months`: Tenure in current role in months
-- `data`: Full JSON response from API
-- `collected_at`: Timestamp of collection
+- `data`: Full JSON response from API (stored as string)
+- `collected_at`: Timestamp of collection (ISO datetime string)
+- **Composite unique constraint on (person_id, org_id)** prevents duplicates
 
-**employees_run_state**:
-- `org_id`: Organization identifier (unique key)
-- `last_collected_at`: Last collection timestamp
-- `is_complete`: Boolean flag indicating completion
+*employees_run_state table*:
+- `org_id`: Organization identifier (primary key)
+- `last_collected_at`: Last collection timestamp (ISO datetime string)
+- `is_complete`: Completion flag (0 or 1, SQLite doesn't have native boolean)
 
 ### Workflow Nodes
 
 1. **When clicking 'Test workflow'**: Manual trigger to start the workflow
-2. **Set Variables**: Initialize workflow variables (org_id, API key, etc.)
-3. **Check Run State**: Query employees_run_state data table to see if org was already processed
-4. **Is Complete?**: Branch based on completion status
-5. **Fetch Employees Page**: Make HTTP request to LookC API
-6. **Process Response**: Parse API response and extract pagination info
-7. **Prepare for Data Table**: Transform employee data for data table insertion
-8. **Upsert Employee**: Insert/update employee records in employees data table
-9. **Check for More Pages**: Determine if more pages exist
-10. **Has More Pages?**: Branch based on pagination status
-11. **Rate Limit Wait**: 50ms delay between requests
-12. **Update Variables for Next Page**: Update pagination cursor for next iteration
-13. **Mark Complete**: Update employees_run_state when all pages are fetched
-14. **Success Message**: Display completion summary
-15. **Already Complete Message**: Display message if org was already processed
+2. **Set Variables**: Initialize workflow variables (org_id, API key, db_path, etc.)
+3. **Create Schema**: Creates both database tables if they don't exist using CREATE TABLE IF NOT EXISTS
+4. **Check Run State**: Queries employees_run_state to see if org was already processed
+5. **Is Complete?**: Branches based on completion status (checks if is_complete = 1)
+6. **Fetch Employees Page**: Makes HTTP request to LookC API with pagination
+7. **Process Response**: Parses API response and extracts pagination info
+8. **Prepare for SQLite**: Transforms employee data for SQLite insertion
+9. **Upsert Employee**: Inserts or updates employee records using ON CONFLICT(person_id, org_id)
+10. **Check for More Pages**: Determines if more pages exist
+11. **Has More Pages?**: Branches based on pagination status
+12. **Rate Limit Wait**: 20ms delay between requests (50 req/s)
+13. **Update Variables for Next Page**: Updates pagination cursor for next iteration
+14. **Mark Complete**: Updates employees_run_state when all pages are fetched
+15. **Success Message**: Displays completion summary
+16. **Already Complete Message**: Displays message if org was already processed
 
 ### API Endpoint
 
@@ -209,7 +197,25 @@ With pagination parameter:
 
 ### Rate Limiting
 
-The workflow implements a 50ms delay between API requests (20 requests/second), which is conservative compared to the LookC API limit of 50 requests/second.
+The workflow implements a 20ms delay between API requests (50 requests/second) to match the LookC API limit of 50 requests/second.
+
+### Upsert Logic
+
+The workflow uses SQLite's `ON CONFLICT` clause with a composite key to handle duplicates:
+
+```sql
+INSERT INTO employees (...)
+VALUES (...)
+ON CONFLICT(person_id, org_id) DO UPDATE SET
+  name = excluded.name,
+  title = excluded.title,
+  ...
+```
+
+This ensures that:
+- If a person-org combination doesn't exist, it's inserted
+- If it already exists, all fields are updated with the latest data
+- The same person can appear in multiple organizations without conflicts
 
 ### Comparison with Python Script
 
@@ -218,27 +224,39 @@ This n8n workflow provides the same functionality as the Python script `get_empl
 | Feature | Python Script | n8n Workflow |
 |---------|--------------|--------------|
 | Pagination | ✓ | ✓ |
-| Data Storage | SQLite | n8n Data Tables |
-| Rate Limiting | ✓ (50ms) | ✓ (50ms) |
+| Data Storage | SQLite | SQLite |
+| Rate Limiting | ✓ (50ms) | ✓ (20ms = 50 req/s) |
 | Resume Support | ✓ | ✓ |
 | Error Handling | ✓ | ✓ |
 | Visual Interface | ✗ | ✓ |
 | Code-free | ✗ | ✓ |
-| External Database | Required | Not Required |
+| Programmatic Schema | ✓ | ✓ |
 
-### Advantages of n8n Data Tables
+### Advantages of SQLite with n8n-nodes-sqlite3
 
-- **No External Database**: Data tables are built into n8n, no need to set up SQLite or other databases
-- **Visual Management**: View and edit data directly in the n8n UI
-- **Project-Scoped**: Data tables are accessible to all workflows in the same project
-- **Automatic Backups**: Data is backed up with your n8n instance
-- **Easy Export**: Export data to CSV or other formats using n8n nodes
+- **Programmatic Schema Creation**: Tables are created automatically via SQL in the workflow
+- **Standard SQL**: Use familiar SQL syntax for queries and data manipulation
+- **Portable**: SQLite database is a single file that can be easily backed up or moved
+- **No Server Required**: SQLite is serverless and requires no configuration
+- **ACID Compliant**: Full transaction support with rollback capabilities
+- **Widely Supported**: Can be queried with any SQLite client or library
 
 ### Troubleshooting
 
+**Community Node Not Found**:
+- Ensure you've installed the `n8n-nodes-sqlite3` community node
+- For self-hosted n8n, verify `N8N_COMMUNITY_NODES_ENABLED=true` is set
+- Restart n8n after installing the community node
+
+**Database Permission Errors**:
+- Verify the database path is writable by the n8n process
+- For Docker, ensure the volume is mounted correctly
+- Check file permissions on the database file and directory
+
 **Authentication Errors (401)**:
 - Verify your LookC API token is correct
-- Ensure the Authorization header is properly configured in the HTTP Request node credentials
+- Ensure the Authorization header is properly configured
+- Check that `LOOKC_API_TOKEN` environment variable is set (if using that method)
 
 **Payment Required (402)**:
 - LookC credits need to be purchased in advance
@@ -249,37 +267,84 @@ This n8n workflow provides the same functionality as the Python script `get_empl
 - Check that you have access to this organization
 
 **Rate Limiting (429)**:
-- The workflow includes automatic rate limiting
+- The workflow includes automatic rate limiting (20ms = 50 req/s)
 - If you still hit limits, increase the wait time in "Rate Limit Wait" node
 
-**Data Table Not Found**:
-- Ensure you've created both `employees` and `employees_run_state` data tables
-- Verify the table names match exactly (case-sensitive)
-- Check that the data tables are in the same project as the workflow
+**SQLite Locked Errors**:
+- Ensure only one workflow instance is accessing the database at a time
+- SQLite supports multiple readers but only one writer at a time
+- Consider using WAL mode for better concurrency if needed
 
-**Storage Limit Reached**:
-- n8n data tables have a default 50MB limit per table
-- Monitor your storage usage in the Data tables tab
-- Consider exporting and archiving old data if approaching the limit
+**Native Module Errors**:
+- The n8n-nodes-sqlite3 package includes prebuilt native bindings for Linux musl (Alpine)
+- If you're on a different platform or Node version, you may need to rebuild
+- See the [n8n-nodes-sqlite3 repository](https://github.com/DangerBlack/n8n-node-sqlite3) for build instructions
 
 ### Notes
 
 - The workflow stores the full JSON response in the `data` column for reference
-- Duplicate employees (same person_id) are updated rather than creating new records using the Upsert operation
+- Duplicate employees (same person_id + org_id) are updated rather than creating new records
 - The workflow can be run multiple times safely - it will skip organizations already marked as complete
-- To re-fetch data for an organization, delete its entry from the `employees_run_state` table or set `is_complete` to false
-- Data tables are scoped to your n8n project and accessible by all team members in that project
-- For self-hosted n8n, you can increase the data table size limit using the `N8N_DATA_TABLES_MAX_SIZE_BYTES` environment variable
+- To re-fetch data for an organization, run: `UPDATE employees_run_state SET is_complete = 0 WHERE org_id = 'YOUR_ORG_ID'`
+- The database file will grow over time; monitor disk space and consider archiving old data periodically
+- SQLite `is_complete` uses INTEGER (0 or 1) instead of BOOLEAN
+
+### Querying Data
+
+You can query the SQLite database using:
+
+1. **Another n8n workflow**:
+   - Add a Manual Trigger
+   - Add a SQLite Node (n8n-nodes-sqlite3)
+   - Set query type to SELECT
+   - Write your SQL query
+   - Example: `SELECT * FROM employees WHERE org_id = $org_id`
+
+2. **SQLite command-line tool**:
+   ```bash
+   sqlite3 /data/lookc_employees.db
+   SELECT COUNT(*) FROM employees;
+   SELECT * FROM employees WHERE org_id = 'YOUR_ORG_ID' LIMIT 10;
+   ```
+
+3. **Any SQLite client**:
+   - DB Browser for SQLite
+   - DBeaver
+   - DataGrip
+   - VS Code SQLite extension
 
 ### Exporting Data
 
-To export employee data from the data table:
+To export employee data from SQLite:
 
-1. Create a new workflow with a Manual Trigger
-2. Add a Data table node set to "Get" operation
-3. Select the `employees` table
-4. Add filters if needed (e.g., filter by org_id)
-5. Add a "Convert to File" node to export as CSV or JSON
-6. Execute the workflow to download the data
+1. **Using SQLite command-line**:
+   ```bash
+   sqlite3 /data/lookc_employees.db
+   .mode csv
+   .headers on
+   .output employees.csv
+   SELECT * FROM employees WHERE org_id = 'YOUR_ORG_ID';
+   .quit
+   ```
 
-See the [n8n data tables documentation](https://docs.n8n.io/data/data-tables/) for more details on exporting and managing data tables.
+2. **Using n8n workflow**:
+   - Create a workflow with a Manual Trigger
+   - Add a SQLite Node to SELECT data
+   - Add a "Convert to File" node to export as CSV or JSON
+   - Execute the workflow to download the data
+
+### Community Node Information
+
+**Package**: n8n-nodes-sqlite3  
+**Author**: DangerBlack  
+**Repository**: https://github.com/DangerBlack/n8n-node-sqlite3  
+**License**: MIT  
+
+The community node uses `better-sqlite3` under the hood, which is a fast, synchronous SQLite3 library for Node.js.
+
+### Security Considerations
+
+- **API Token**: Never commit your LookC API token to version control. Use environment variables or n8n credentials.
+- **Database Access**: Ensure the SQLite database file has appropriate permissions and is not publicly accessible.
+- **SQL Injection**: The workflow uses parameterized queries ($param syntax) to prevent SQL injection attacks.
+- **Data Privacy**: Employee data may contain PII. Ensure compliance with data protection regulations (GDPR, CCPA, etc.).
